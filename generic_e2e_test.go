@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-func setupConnection(t *testing.T) {
+func getTarget(t *testing.T) (string, uint16) {
 	var envTarget string
 	var envPort string
 
@@ -39,53 +39,45 @@ func setupConnection(t *testing.T) {
 	if len(envTarget) <= 0 {
 		t.Skip("environment variable not set: GOSNMP_TARGET")
 	}
-	Default.Target = envTarget
 
 	if len(envPort) <= 0 {
 		t.Skip("environment variable not set: GOSNMP_PORT")
 	}
 	port, _ := strconv.ParseUint(envPort, 10, 16)
-	Default.Port = uint16(port)
+
+	if port > 65535 {
+		t.Skipf("invalid port number %d", port)
+	}
+
+	return envTarget, uint16(port)
+}
+
+func setupConnection(t *testing.T) {
+	target, port := getTarget(t)
+
+	Default.Target = target
+	Default.Port = port
 
 	err := Default.Connect()
 	if err != nil {
-		if len(envTarget) > 0 {
-			t.Fatalf("Connection failed. Is snmpd reachable on %s:%s?\n(err: %v)",
-				envTarget, envPort, err)
+		if len(target) > 0 {
+			t.Fatalf("Connection failed. Is snmpd reachable on %s:%d?\n(err: %v)",
+				target, port, err)
 		}
 	}
 }
 
 func setupConnectionIPv4(t *testing.T) {
-	var envTarget string
-	var envPort string
+	target, port := getTarget(t)
 
-	// set this flag to true in v3_testing_credentials.go if you want to use the
-	// public SNMP demo service for tests
-	if isUsingSnmpLabs() {
-		envTarget = "demo.snmplabs.com"
-		envPort = "161"
-	} else {
-		envTarget = os.Getenv("GOSNMP_TARGET")
-		envPort = os.Getenv("GOSNMP_PORT")
-	}
-
-	if len(envTarget) <= 0 {
-		t.Skip("environment variable not set: GOSNMP_TARGET_IPV4")
-	}
-	Default.Target = envTarget
-
-	if len(envPort) <= 0 {
-		t.Skip("environment variable not set: GOSNMP_PORT_IPV4")
-	}
-	port, _ := strconv.ParseUint(envPort, 10, 16)
-	Default.Port = uint16(port)
+	Default.Target = target
+	Default.Port = port
 
 	err := Default.ConnectIPv4()
 	if err != nil {
-		if len(envTarget) > 0 {
-			t.Fatalf("Connection failed. Is snmpd reachable on %s:%s?\n(err: %v)",
-				envTarget, envPort, err)
+		if len(target) > 0 {
+			t.Fatalf("Connection failed. Is snmpd reachable on %s:%d?\n(err: %v)",
+				target, port, err)
 		}
 	}
 }
@@ -336,7 +328,6 @@ func TestSnmpV3NoAuthNoPrivBasicGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = NoAuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "noAuthNoPrivUser"}
 	Default.SecurityParameters = &UsmSecurityParameters{ UserName: getUserName(t, NoAuth, NoPriv)}
 	setupConnection(t)
 	defer Default.Conn.Close()
@@ -361,7 +352,6 @@ func TestSnmpV3AuthMD5NoPrivGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authMD5OnlyUser", AuthenticationProtocol: MD5, AuthenticationPassphrase: "testingpass0123456789"}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, MD5, NoPriv), AuthenticationProtocol: MD5, AuthenticationPassphrase: getAuthKey(t, MD5, NoPriv)}
 	setupConnection(t)
 	defer Default.Conn.Close()
@@ -386,7 +376,6 @@ func TestSnmpV3AuthMD5PrivAES256CGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAOnlyUser", AuthenticationProtocol: SHA, AuthenticationPassphrase: "testingpass9876543210"}
 	Default.SecurityParameters = &UsmSecurityParameters{
 		UserName: getUserName(t, MD5, AES256C),
 		AuthenticationProtocol: MD5, AuthenticationPassphrase: getAuthKey(t, MD5, AES256C),
@@ -415,7 +404,6 @@ func TestSnmpV3AuthSHANoPrivGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAOnlyUser", AuthenticationProtocol: SHA, AuthenticationPassphrase: "testingpass9876543210"}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA, NoPriv), AuthenticationProtocol: SHA, AuthenticationPassphrase: getAuthKey(t, SHA, NoPriv)}
 	setupConnection(t)
 	defer Default.Conn.Close()
@@ -440,7 +428,6 @@ func TestSnmpV3AuthSHAPrivAESGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAOnlyUser", AuthenticationProtocol: SHA, AuthenticationPassphrase: "testingpass9876543210"}
 	Default.SecurityParameters = &UsmSecurityParameters{
 		UserName: getUserName(t, SHA, AES),
 		AuthenticationProtocol: SHA, AuthenticationPassphrase: getAuthKey(t, SHA, AES),
@@ -469,7 +456,6 @@ func TestSnmpV3AuthSHAPrivAES256CGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAOnlyUser", AuthenticationProtocol: SHA, AuthenticationPassphrase: "testingpass9876543210"}
 	Default.SecurityParameters = &UsmSecurityParameters{
 		UserName: getUserName(t, SHA, AES256C),
 		AuthenticationProtocol: SHA, AuthenticationPassphrase: getAuthKey(t, SHA, AES256C),
@@ -498,7 +484,6 @@ func TestSnmpV3AuthSHA224NoPrivGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHA224OnlyUser", AuthenticationProtocol: SHA224, AuthenticationPassphrase: "testingpass5123456"}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA224, NoPriv), AuthenticationProtocol: SHA224, AuthenticationPassphrase: getAuthKey(t, SHA224, NoPriv)}
 	setupConnection(t)
 	defer Default.Conn.Close()
@@ -523,7 +508,6 @@ func TestSnmpV3AuthSHA256NoPrivGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHA256OnlyUser", AuthenticationProtocol: SHA256, AuthenticationPassphrase: "testingpass5223456"}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA256, NoPriv), AuthenticationProtocol: SHA256, AuthenticationPassphrase: getAuthKey(t, SHA256, NoPriv)}
 	setupConnection(t)
 	defer Default.Conn.Close()
@@ -548,7 +532,6 @@ func TestSnmpV3AuthSHA384NoPrivGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHA384OnlyUser", AuthenticationProtocol: SHA384, AuthenticationPassphrase: "testingpass5323456"}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA384, NoPriv), AuthenticationProtocol: SHA384, AuthenticationPassphrase: getAuthKey(t, SHA384, NoPriv)}
 	setupConnection(t)
 	defer Default.Conn.Close()
@@ -573,7 +556,6 @@ func TestSnmpV3AuthSHA512NoPrivGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHA512OnlyUser", AuthenticationProtocol: SHA512, AuthenticationPassphrase: "testingpass5423456"}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA512, NoPriv), AuthenticationProtocol: SHA512, AuthenticationPassphrase: getAuthKey(t, SHA512, NoPriv)}
 	setupConnection(t)
 	defer Default.Conn.Close()
@@ -598,7 +580,6 @@ func TestSnmpV3AuthSHA512PrivAES192Get(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHA512OnlyUser", AuthenticationProtocol: SHA512, AuthenticationPassphrase: "testingpass5423456"}
 	Default.SecurityParameters = &UsmSecurityParameters{
 		UserName: getUserName(t, SHA512, AES192),
 		AuthenticationProtocol: SHA512, AuthenticationPassphrase: getAuthKey(t, SHA512, AES192),
@@ -629,7 +610,6 @@ func TestSnmpV3AuthSHA512PrivAES256CGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//	Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAOnlyUser", AuthenticationProtocol: SHA, AuthenticationPassphrase: "testingpass9876543210"}
 	Default.SecurityParameters = &UsmSecurityParameters{
 		UserName: getUserName(t, SHA512, AES256C),
 		AuthenticationProtocol: SHA512, AuthenticationPassphrase: getAuthKey(t, SHA512, AES256C),
@@ -658,11 +638,6 @@ func TestSnmpV3AuthMD5PrivDESGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//Default.SecurityParameters = &UsmSecurityParameters{UserName: "authMD5PrivDESUser",
-	//	AuthenticationProtocol:   MD5,
-	//	AuthenticationPassphrase: "testingpass9876543210",
-	//	PrivacyProtocol:          DES,
-	//	PrivacyPassphrase:        "testingpass9876543210"}
 
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, MD5, DES),
 		AuthenticationProtocol:   MD5,
@@ -693,11 +668,6 @@ func TestSnmpV3AuthSHAPrivDESGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAPrivDESUser",
-	//	AuthenticationProtocol:   SHA,
-	//	AuthenticationPassphrase: "testingpassabc6543210",
-	//	PrivacyProtocol:          DES,
-	//	PrivacyPassphrase:        "testingpassabc6543210"}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA, DES),
 		AuthenticationProtocol:   SHA,
 		AuthenticationPassphrase: getAuthKey(t, SHA, DES),
@@ -727,11 +697,6 @@ func TestSnmpV3AuthMD5PrivAESGet(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//Default.SecurityParameters = &UsmSecurityParameters{UserName: "authMD5PrivAESUser",
-	//	AuthenticationProtocol:   MD5,
-	//	AuthenticationPassphrase: "AEStestingpass9876543210",
-	//	PrivacyProtocol:          AES,
-	//	PrivacyPassphrase:        "AEStestingpass9876543210"}
 
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, MD5, AES),
 		AuthenticationProtocol:   MD5,
@@ -762,11 +727,6 @@ func TestSnmpV3PrivEmptyPrivatePassword(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthPriv
 	Default.SecurityModel = UserSecurityModel
-	//Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAPrivAESUser",
-	//	AuthenticationProtocol:   SHA,
-	//	AuthenticationPassphrase: "AEStestingpassabc6543210",
-	//	PrivacyProtocol:          AES,
-	//	PrivacyPassphrase:        ""}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA, AES),
 		AuthenticationProtocol:   SHA,
 		AuthenticationPassphrase: getAuthKey(t, SHA, AES),
@@ -783,11 +743,6 @@ func TestSnmpV3AuthNoPrivEmptyPrivatePassword(t *testing.T) {
 	Default.Version = Version3
 	Default.MsgFlags = AuthNoPriv
 	Default.SecurityModel = UserSecurityModel
-	//Default.SecurityParameters = &UsmSecurityParameters{UserName: "authSHAOnlyUser",
-	//	AuthenticationProtocol:   SHA,
-	//	AuthenticationPassphrase: "testingpass9876543210",
-	//	PrivacyProtocol:          AES,
-	//	PrivacyPassphrase:        ""}
 	Default.SecurityParameters = &UsmSecurityParameters{UserName: getUserName(t, SHA, NoPriv),
 		AuthenticationProtocol:   SHA,
 		AuthenticationPassphrase: getAuthKey(t, SHA, NoPriv),
